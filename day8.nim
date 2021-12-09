@@ -5,32 +5,31 @@ import std/strformat
 import std/tables
 import std/sets
 import std/algorithm
-import std/[strutils, math, threadpool]
-{.experimental: "parallel".}
+import nimprof
 
-const numbers = {
-  0: @['a', 'b', 'c', 'e', 'f', 'g'],
-  1: @['c', 'f'],
-  2: @['a', 'c', 'd', 'e', 'g'],
-  3: @['a', 'c', 'd', 'f', 'g'],
-  4: @['b', 'c', 'd', 'f'],
-  5: @['a', 'b', 'd', 'f', 'g'],
-  6: @['a', 'b', 'd', 'e', 'f', 'g'],
-  7: @['a', 'c', 'f'],
-  8: @['a', 'b', 'c', 'd', 'e', 'f', 'g'],
-  9: @['a', 'b', 'c', 'd', 'f', 'g']
-}.toTable
-const number_sets = {
-  toHashSet(@['a', 'b', 'c', 'e', 'f', 'g']): '0',
-  toHashSet(@['c', 'f']): '1',
-  toHashSet(@['a', 'c', 'd', 'e', 'g']): '2',
-  toHashSet(@['a', 'c', 'd', 'f', 'g']): '3',
-  toHashSet(@['b', 'c', 'd', 'f']): '4',
-  toHashSet(@['a', 'b', 'd', 'f', 'g']): '5',
-  toHashSet(@['a', 'b', 'd', 'e', 'f', 'g']): '6',
-  toHashSet(@['a', 'c', 'f']): '7',
-  toHashSet(@['a', 'b', 'c', 'd', 'e', 'f', 'g']): '8',
-  toHashSet(@['a', 'b', 'c', 'd', 'f', 'g']): '9',
+const canonical_strings_set = toHashSet(@[
+  "abcefg",
+  "cf",
+  "acdeg",
+  "acdfg",
+  "bcdf",
+  "abdfg",
+  "abdefg",
+  "acf",
+  "abcdefg",
+  "abcdfg",
+])
+const canonical_strings_table = {
+  "abcefg": '0',
+  "cf": '1',
+  "acdeg": '2',
+  "acdfg": '3',
+  "bcdf": '4',
+  "abdfg": '5',
+  "abdefg": '6',
+  "acf": '7',
+  "abcdefg": '8',
+  "abcdfg": '9',
 }.toTable
 
 type InputLine = tuple
@@ -56,66 +55,42 @@ proc parse(filename: string): seq[InputLine] =
   while f.readLine(line):
     result.add(parse_input(line))
   
-proc solve_1(input: InputLine): int = 
-  var candidates = initTable[int, seq[string]]()
-  for i in 0..9:
-    let possible: seq[string] = input.unique_numbers.filterIt(numbers[i].len == it.len)
-    candidates[i] = possible
-  
-  let eight = candidates[8][0]
-  let seven = candidates[7][0]
-  let four = candidates[4][0]
-  let one = candidates[1][0]
-  let relevant = input.output.filterIt(it in [one, four, seven, eight])
-  echo [seven, four, one], input.output, relevant
-  result = relevant.len
+proc decode_string(s: string, decoder: seq[char]): string =
+  var decoding_table = initTable[char, char]()
+  for (letter_k, letter_v) in zip(toSeq('a'..'g'), decoder):
+    decoding_table[letter_k] = letter_v
+  result = sorted(toSeq(s).mapIt(fmt"{decoding_table[it]}")).join
 
-proc decode_string(s: string, decoder: Table[char, char]): HashSet[char] =
-  result = toHashSet(toSeq(s).mapIt(decoder[it]))
+proc decode_number(s: string, decoder: seq[char]): char =
+  let decoded = decode_string(s, decoder)
+  result = canonical_strings_table[decoded]
 
-proc decode_number(s: string, decoder: Table[char, char]): char =
-  result = number_sets[decode_string(s, decoder)]
-
-proc test_decoding_table(input: InputLine, decoder: Table[char, char]): bool =
+proc is_valid(input: InputLine, decoder: seq[char]): bool =
   let decoded = input.unique_numbers.mapIt(decode_string(it, decoder))
   let all_decoded = toHashSet(decoded)
-  let canonical = toHashSet(toSeq(number_sets.keys))
-  result = all_decoded == canonical
+  result = all_decoded == canonical_strings_set
 
-proc with_new_entry(decoder: Table[char, char], key: char, value: char): Table[char, char] =
-  result = decoder
-  result[key] = value
-
-proc brute_force_decoding_table(input: InputLine, decoder: Table[char, char]): (bool, Table[char, char]) =
-  result = (false, decoder)
-  let remaining_values = toHashSet(toSeq('a'..'g')) - toHashSet(toSeq(decoder.values))
-  var remaining_keys = toHashSet(toSeq('a'..'g')) - toHashSet(toSeq(decoder.keys))
-  if remaining_keys.len == 0:
-    result = (test_decoding_table(input, decoder), decoder)
-  else:
-    let k = remaining_keys.pop
-    for v in remaining_values:
-      let (works, new_decoder) = brute_force_decoding_table(input, with_new_entry(decoder, k, v))
-      if works:
-        result = (true, new_decoder)
-        break
-
+proc brute_force_decoding_key(input: InputLine): seq[char] =
+  var decoding_key = @['a', 'b', 'c', 'd', 'e', 'f', 'g']
+  result = @[]
+  while decoding_key.nextPermutation():
+    if is_valid(input, decoding_key):
+      result = decoding_key
+      break
+  assert result.len > 0
 
 proc solve_line(line: InputLine): int = 
-  let (works, decoder) = brute_force_decoding_table(line, initTable[char, char]())
-  assert works
+  let decoder = brute_force_decoding_key(line)
   result = parseInt(line.output.mapIt(decode_number(it, decoder)).mapIt(fmt"{it}").join)
 
 proc solve_2(filename: string): int = 
   let lines = parse(filename)
   var solutions = newSeq[int](lines.len)
-  parallel:
-    for i in 0..<lines.len:
-      solutions[i] = spawn solve_line(lines[i])
+  for i in 0..<lines.len:
+    solutions[i] = solve_line(lines[i])
 
   echo solutions
   result = solutions.foldr(a + b)
   
-
 echo solve_2("./inputs/day8/sample.txt")
 echo solve_2("./inputs/day8/input.txt")
