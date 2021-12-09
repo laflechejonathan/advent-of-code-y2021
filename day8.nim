@@ -5,7 +5,6 @@ import std/strformat
 import std/tables
 import std/sets
 import std/algorithm
-import nimprof
 
 const canonical_strings_set = toHashSet(@[
   "abcefg",
