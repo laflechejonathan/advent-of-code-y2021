@@ -38,36 +38,31 @@ proc parse_input(filename: string): seq[string] =
 
 proc check_syntax(line: string): char =
   var stack = initDeque[char]()
-  var bad_char = '?'
   for c in line:
     if c in ['[', '{', '<', '(']:
       stack.addFirst(c)
     elif c in [']', '}', '>', ')']:
       if (open_to_close[stack.popFirst()] != c):
-        bad_char = c
-        break
+        return c
     else:
       assert false
 
-  result = bad_char
+  return '?'
 
 proc autocomplete(line: string): seq[char]  =
   var stack = initDeque[char]()
-  var is_valid = true
   for c in line:
     if c in ['[', '{', '<', '(']:
       stack.addFirst(c)
     elif c in [']', '}', '>', ')']:
       if (open_to_close[stack.popFirst()] != c):
-        is_valid = false
-        break
+        return @[]
     else:
       assert false
 
-  if is_valid:
-    result = collect:
-      for c in stack:
-        open_to_close[c]
+  return collect:
+    for c in stack:
+      open_to_close[c]
 
 proc score_autocomplete(completion: seq[char]): int =
   result = 0
