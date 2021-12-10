@@ -38,16 +38,12 @@ proc parse_input(filename: string): seq[string] =
 
 proc check_syntax(line: string): char =
   var stack = initDeque[char]()
-  var is_valid = false
   var bad_char = '?'
   for c in line:
     if c in ['[', '{', '<', '(']:
       stack.addFirst(c)
     elif c in [']', '}', '>', ')']:
-      let expected = open_to_close[stack.popFirst()]
-      if (expected != c):
-        # echo fmt"Expect {expected} but found {c} instead."
-        is_valid = false
+      if (open_to_close[stack.popFirst()] != c):
         bad_char = c
         break
     else:
@@ -62,8 +58,7 @@ proc autocomplete(line: string): seq[char]  =
     if c in ['[', '{', '<', '(']:
       stack.addFirst(c)
     elif c in [']', '}', '>', ')']:
-      let expected = open_to_close[stack.popFirst()]
-      if (expected != c):
+      if (open_to_close[stack.popFirst()] != c):
         is_valid = false
         break
     else:
