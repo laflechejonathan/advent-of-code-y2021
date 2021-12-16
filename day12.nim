@@ -9,8 +9,7 @@ import std/deques
 import std/options
 import std/re
 
-type
-  CaveSize = enum
+type CaveSize = enum
     small, big
 
 type Cave = tuple
